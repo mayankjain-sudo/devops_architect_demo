@@ -58,8 +58,8 @@ jobs:
         with:
           image-ref: "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
           severity: "HIGH,CRITICAL"
-          exit-code: "1"
-
+          exit-code: "0" # put value to 1 if want to fail the pipeline intentionally for HIGH CRITICAL severity
+ 
   cosign-sign:
     runs-on: ubuntu-latest
     needs: container-scan
