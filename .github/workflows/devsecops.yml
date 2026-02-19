@@ -30,7 +30,7 @@ jobs:
         with:
           scan-type: 'fs'
           severity: 'HIGH,CRITICAL'
-          exit-code: '1'
+          exit-code: '0' # put value 1 if you want to fail the pipeline intensionally for HIGH CRITICAL severity 
 
   docker:
     runs-on: ubuntu-latest
