@@ -1,6 +1,5 @@
 name: Enterprise DevSecOps Pipeline
 
-
 on:
   push:
     branches: ["**"]
@@ -70,7 +69,11 @@ jobs:
       contents: read
     steps:
       - uses: sigstore/cosign-installer@v3
-      - run: cosign sign --yes $IMAGE_NAME:$IMAGE_TAG
+      - name: Sign Image
+        run: |
+         cosign sign --yes \
+         --registry-token ${{ secrets.GITHUB_TOKEN }} \
+         ghcr.io/${{ github.repository }}:${{ github.sha }}
 
   deploy-dev:
     if: startsWith(github.ref, 'refs/heads/feature')
