@@ -1,5 +1,6 @@
 name: Enterprise DevSecOps Pipeline
 
+
 on:
   push:
     branches: ["**"]
@@ -69,7 +70,13 @@ jobs:
       contents: read
     steps:
       - uses: sigstore/cosign-installer@v3
-      - run: cosign sign --yes $IMAGE_NAME:$IMAGE_TAG
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | \
+             docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Sign Image
+        run: |
+          cosign sign --yes \
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
 
   deploy-dev:
     if: startsWith(github.ref, 'refs/heads/feature')
