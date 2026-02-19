@@ -7,10 +7,10 @@ on:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
+  # We use the SHA for the tag, but we will sign by Digest
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-
   build-test:
     runs-on: ubuntu-latest
     steps:
@@ -30,7 +30,7 @@ jobs:
         with:
           scan-type: 'fs'
           severity: 'HIGH,CRITICAL'
-          exit-code: '0' # put value 1 if you want to fail the pipeline intensionally for HIGH CRITICAL severity 
+          exit-code: '0'
 
   docker:
     runs-on: ubuntu-latest
@@ -38,17 +38,25 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: |
-          docker build -t $IMAGE_NAME:$IMAGE_TAG .
-          docker push $IMAGE_NAME:$IMAGE_TAG
+      
+      # Using build-push-action makes capturing the digest much easier
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
   container-scan:
     runs-on: ubuntu-latest
@@ -56,24 +64,33 @@ jobs:
     steps:
       - uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          # Use the digest for scanning too—it's more secure!
+          image-ref: "${{ env.IMAGE_NAME }}@${{ needs.docker.outputs.image_digest }}"
           severity: "HIGH,CRITICAL"
-          exit-code: "0" # put value to 1 if want to fail the pipeline intentionally for HIGH CRITICAL severity
+          exit-code: "0"
  
   cosign-sign:
     runs-on: ubuntu-latest
-    needs: container-scan
+    needs: [docker, container-scan] # Needs both to ensure scan finishes
     permissions:
       id-token: write
       packages: write
       contents: read
     steps:
-      - uses: sigstore/cosign-installer@v3
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+        
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Sign Image
         run: |
-         cosign sign --yes \
-         --registry-token ${{ secrets.GITHUB_TOKEN }} \
-         ghcr.io/${{ github.repository }}:${{ github.sha }}
+          # We sign using the IMAGE_NAME @ DIGEST
+          cosign sign --yes "${{ env.IMAGE_NAME }}@${{ needs.docker.outputs.image_digest }}"
 
   deploy-dev:
     if: startsWith(github.ref, 'refs/heads/feature')
@@ -81,7 +98,7 @@ jobs:
     needs: cosign-sign
     environment: dev
     steps:
-      - run: echo "Deploy to DEV via GitOps"
+      - run: echo "Deploying version ${{ env.IMAGE_TAG }} to DEV"
 
   deploy-prod:
     if: startsWith(github.ref, 'refs/tags/v')
