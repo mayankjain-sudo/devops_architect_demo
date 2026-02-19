@@ -65,6 +65,7 @@ jobs:
     needs: container-scan
     permissions:
       id-token: write
+      packages: write
       contents: read
     steps:
       - uses: sigstore/cosign-installer@v3
